@@ -29,7 +29,7 @@ private:
 	GLUquadricObj *_disk;
 	GLUquadricObj *_texQuad;
 	GLuint _texture;
-	GLubyte* _pixel;
+	GLuint _ringTexture;
 private:
 
 public:
@@ -51,6 +51,6 @@ public:
 	void SetRevolutionAxis(float axis);
 	void SetCircle(float inner, float outer);
 	void AddSatellite(SPlanet *satellite);
-	void TextureLoad(const char* filename);
+	void TextureLoad(const char* filename, int mode);
 };
 

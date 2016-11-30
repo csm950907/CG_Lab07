@@ -19,6 +19,7 @@ SPlanet::SPlanet()
 	this->_disk = gluNewQuadric();
 	this->_texQuad = gluNewQuadric();
 	this->_texture = -1;
+	this->_ringTexture = -1;
 	this->Initialize();
 }
 
@@ -39,6 +40,7 @@ void SPlanet::Release() {
 	gluDeleteQuadric(this->_disk);
 	gluDeleteQuadric(this->_texQuad);
 	if(this->_texture != -1) glDeleteTextures(1, &this->_texture);
+	if(this->_ringTexture != -1) glDeleteTextures(1, &this->_ringTexture);
 	this->_satellites.clear();
 }
 
@@ -72,41 +74,12 @@ void SPlanet::Render() {
 	glEnable(GL_TEXTURE_GEN_S);
 	glEnable(GL_TEXTURE_GEN_T);
 
-	if (this->_texture != -1) {
-		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-
-		//gluQuadricDrawStyle(this->_texQuad, GLU_FILL);
-		//gluQuadricTexture(this->_texQuad, GL_TRUE);
-
-		glBindTexture(GL_TEXTURE_2D, this->_texture);
-
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 128, 0, GL_RGBA, GL_UNSIGNED_BYTE, this->_pixel);
-
-		GLfloat plane_coef_s[] = { 1, 0, 0, 1 };
-		GLfloat plane_coef_t[] = { 0, 1, 0, 1 };
-
-		glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
-		glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
-		glTexGenfv(GL_S, GL_OBJECT_PLANE, plane_coef_s);
-		glTexGenfv(GL_T, GL_OBJECT_PLANE, plane_coef_t);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	}
-
 	glMatrixMode(GL_TEXTURE);
+
 	glLoadIdentity();
-	//glTranslatef(0.5, 0, 0);
 	glTranslatef(this->_rotateAngle / 100, 0, 0);
 	glRotatef(this->_rotateAxis, 0, 0, 1);
-	//glRotatef(m_rotationAmount, 0, 1, 0);
-	//glTranslatef(-0.5, 0, 0);
-
+	
 	glMatrixMode(GL_MODELVIEW);
 
 	glRotatef(this->_rotateAxis, 0, 0, 1);
@@ -115,11 +88,15 @@ void SPlanet::Render() {
 	glMaterialfv(GL_FRONT, GL_DIFFUSE, diffuse);
 	glMaterialfv(GL_FRONT, GL_SPECULAR, specular);
 	glMaterialf(GL_FRONT, GL_SHININESS, _material.shine);
-
+	glBindTexture(GL_TEXTURE_2D, this->_texture);
 	glutSolidSphere(this->_size, 36, 72);
 	glPushMatrix();
 	glRotatef(90, 1, 0, 0);
-	gluDisk(this->_disk, this->_circleInner, this->_circleOuter, 100, 100);
+	if (this->_ringTexture != -1) {
+		gluQuadricTexture(this->_disk, GL_TRUE);
+		glBindTexture(GL_TEXTURE_2D, this->_ringTexture);
+		gluDisk(this->_disk, this->_circleInner, this->_circleOuter, 100, 100);
+	}
 	glPopMatrix();
 	glPopMatrix();
 
@@ -167,30 +144,103 @@ void SPlanet::AddSatellite(SPlanet* satellite) {
 	this->_satellites.push_back(satellite);
 }
 
-void SPlanet::TextureLoad(const char* filename) {
-	glGenTextures(1, &this->_texture);
-	FILE * fp = fopen(filename, "rb");
-	BITMAPFILEHEADER fileHeader;
-	BITMAPINFOHEADER infoHeader;
-	
-	fread(&fileHeader, 1, sizeof(BITMAPFILEHEADER), fp);
+void SPlanet::TextureLoad(const char* filename, int mode) {
+	if (mode == 0) {
+		glGenTextures(1, &this->_texture);
+		FILE * fp = fopen(filename, "rb");
+		BITMAPFILEHEADER fileHeader;
+		BITMAPINFOHEADER infoHeader;
 
-	if (fileHeader.bfType != 0x4D42 || fileHeader.bfReserved1 != 0 || fileHeader.bfReserved2 != 0){
-		glDeleteTextures(1, &this->_texture);
-	}
-	
-	fread(&infoHeader, 1, sizeof(BITMAPINFOHEADER), fp);
-	
-	if (infoHeader.biPlanes != 1){
-		glDeleteTextures(1, &this->_texture);
-	}
-	
-	fseek(fp, fileHeader.bfOffBits, SEEK_SET);
-	
-	GLubyte * pixels = new GLubyte[256 * 256 * 4];
-	fread(pixels, 1, 256 * 256 * 4, fp);
-	fclose(fp);
-	
-	this->_pixel = pixels;
+		fread(&fileHeader, 1, sizeof(BITMAPFILEHEADER), fp);
 
+		if (fileHeader.bfType != 0x4D42 || fileHeader.bfReserved1 != 0 || fileHeader.bfReserved2 != 0) {
+			glDeleteTextures(1, &this->_texture);
+		}
+		
+		fread(&infoHeader, 1, sizeof(BITMAPINFOHEADER), fp);
+
+		if (infoHeader.biPlanes != 1) {
+			glDeleteTextures(1, &this->_texture);
+		}
+
+		fseek(fp, fileHeader.bfOffBits, SEEK_SET);
+
+		GLubyte * pixels = new GLubyte[infoHeader.biWidth * infoHeader.biHeight * 4];
+		fread(pixels, 1, infoHeader.biWidth * infoHeader.biHeight * 4, fp);
+		fclose(fp);
+
+		if (this->_texture != -1) {
+			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+			glBindTexture(GL_TEXTURE_2D, this->_texture);
+
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, infoHeader.biWidth, infoHeader.biHeight, 0, GL_BGR_EXT, GL_UNSIGNED_BYTE, pixels);
+
+			GLfloat plane_coef_s[] = { 1, 0, 0, 1 };
+			GLfloat plane_coef_t[] = { 0, 1, 0, 1 };
+
+			glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+			glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+			glTexGenfv(GL_S, GL_OBJECT_PLANE, plane_coef_s);
+			glTexGenfv(GL_T, GL_OBJECT_PLANE, plane_coef_t);
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		}
+		delete[] pixels;
+	}
+	else {
+		glGenTextures(1, &this->_ringTexture);
+		FILE * fp = fopen(filename, "rb");
+		BITMAPFILEHEADER fileHeader;
+		BITMAPINFOHEADER infoHeader;
+
+		fread(&fileHeader, 1, sizeof(BITMAPFILEHEADER), fp);
+
+		if (fileHeader.bfType != 0x4D42 || fileHeader.bfReserved1 != 0 || fileHeader.bfReserved2 != 0) {
+			glDeleteTextures(1, &this->_ringTexture);
+		}
+
+		fread(&infoHeader, 1, sizeof(BITMAPINFOHEADER), fp);
+
+		if (infoHeader.biPlanes != 1) {
+			glDeleteTextures(1, &this->_ringTexture);
+		}
+
+		fseek(fp, fileHeader.bfOffBits, SEEK_SET);
+
+		GLubyte * pixels = new GLubyte[infoHeader.biWidth * infoHeader.biHeight * 4];
+		fread(pixels, 1, infoHeader.biWidth * infoHeader.biHeight * 4, fp);
+		fclose(fp);
+
+		if (this->_texture != -1) {
+			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+			glBindTexture(GL_TEXTURE_2D, this->_ringTexture);
+
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, infoHeader.biWidth, infoHeader.biHeight, 0, GL_BGR_EXT, GL_UNSIGNED_BYTE, pixels);
+
+			GLfloat plane_coef_s[] = { 1, 0, 0, 1 };
+			GLfloat plane_coef_t[] = { 0, 1, 0, 1 };
+
+			glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+			glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP);
+			glTexGenfv(GL_S, GL_OBJECT_PLANE, plane_coef_s);
+			glTexGenfv(GL_T, GL_OBJECT_PLANE, plane_coef_t);
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		}
+		delete[] pixels;
+	}
 }

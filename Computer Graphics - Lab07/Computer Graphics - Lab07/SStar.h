@@ -1,5 +1,7 @@
 #pragma once
 #include "SMath.h"
+#include <gl/glut.h>
+
 typedef struct _light {
 	int lightIdx;
 	Vector4 ambient;
@@ -25,6 +27,7 @@ private:
 	_material _material;
 	float _size;
 	bool _enable;
+	GLuint _texture;
 
 public:
 	SStar();
@@ -42,5 +45,6 @@ public:
 	void SetPosition(Vector3 & pos);
 	void SetSize(float size);
 	void SetEnable(bool flag);
+	void TextureLoad(const char* filename);
 };
 
